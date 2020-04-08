@@ -14,11 +14,10 @@ import androidx.appcompat.app.AppCompatActivity;
 public class MainActivity extends AppCompatActivity {
 
     private Timer timer;
-    private TextView tvSensorValue;
-    private TextView tvMicroStateText;
-    private TextView tvMovement;
-    private TextView tvRecognitionResult;
-    private Button btnClearScreen;
+    private TextView sensorValueTextView;
+    private TextView meterDirectionTextView;
+    private TextView movementTextView;
+    private TextView gestureTextView;
 
     private String lastMicroState;
     private String lastMovement;
@@ -29,13 +28,13 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        SensorHandlerJNI.init();
-        this.tvSensorValue = findViewById(R.id.sensorText);
-        this.tvMicroStateText = findViewById(R.id.microStateText);
-        this.tvMovement = findViewById(R.id.movementText);
-        this.tvRecognitionResult = findViewById(R.id.recognitionText);
-        this.btnClearScreen = findViewById(R.id.btnClearScreen);
-        this.btnClearScreen.setOnClickListener(new View.OnClickListener() {
+        MotionLibJNI.init();
+        this.sensorValueTextView = findViewById(R.id.sensorText);
+        this.meterDirectionTextView = findViewById(R.id.meterDirectionText);
+        this.movementTextView = findViewById(R.id.movementText);
+        this.gestureTextView = findViewById(R.id.gestureText);
+        Button clearScreenButton = findViewById(R.id.btnClearScreen);
+        clearScreenButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 clearScreen();
@@ -48,35 +47,35 @@ public class MainActivity extends AppCompatActivity {
         this.timer.schedule(new TimerTask() {
             @Override
             public void run() {
-                float[] acceleration = SensorHandlerJNI.getLastAcceleration();
+                float[] acceleration = MotionLibJNI.getLastMeterValue();
                 final String accelerationStr = String.format(
                         Locale.getDefault(),
                         "x: %f\ny: %f\nz: %f\n",
                         acceleration[0], acceleration[1], acceleration[2]
                 );
 
-                final String currentMicroState = SensorHandlerJNI.getLastMicroState();
-                final String currentMovement = SensorHandlerJNI.getLastMovement();
-                final String currentGesture = SensorHandlerJNI.getLastGesture();
+                final String currentMicroState = MotionLibJNI.getLastDirection();
+                final String currentMovement = MotionLibJNI.getLastMovement();
+                final String currentGesture = MotionLibJNI.getLastGesture();
 
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        tvSensorValue.setText(accelerationStr);
+                        sensorValueTextView.setText(accelerationStr);
                         if (!currentMicroState.equals(lastMicroState)) {
-                            tvMicroStateText.append(" " + currentMicroState);
+                            meterDirectionTextView.append(" " + currentMicroState);
                             lastMicroState = currentMicroState;
                         }
                         if (!currentMovement.equals(lastMovement)) {
-                            tvMovement.append(" " + currentMovement);
+                            movementTextView.append(" " + currentMovement);
                             lastMovement = currentMovement;
                         }
                         if (!currentGesture.equals(lastGesture)) {
-                            tvRecognitionResult.append(" " + currentGesture);
+                            gestureTextView.append(" " + currentGesture);
                             lastGesture = currentGesture;
                         }
 
-                        SensorHandlerJNI.capture();
+                        MotionLibJNI.update();
                     }
                 });
             }
@@ -94,7 +93,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
 
-        SensorHandlerJNI.onResume();
+        MotionLibJNI.resume();
         this.setTimerTask();
     }
 
@@ -102,13 +101,13 @@ public class MainActivity extends AppCompatActivity {
     protected void onPause() {
         super.onPause();
 
-        SensorHandlerJNI.onPause();
+        MotionLibJNI.pause();
         this.cancelTimerTask();
     }
 
     void clearScreen() {
-        this.tvMicroStateText.setText(R.string.txtMicroState);
-        this.tvMovement.setText(R.string.txtMovement);
-        this.tvRecognitionResult.setText(R.string.txtGesture);
+        this.meterDirectionTextView.setText(R.string.txtMeterDirection);
+        this.movementTextView.setText(R.string.txtMovement);
+        this.gestureTextView.setText(R.string.txtGesture);
     }
 }
