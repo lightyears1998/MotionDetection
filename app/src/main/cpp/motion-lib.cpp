@@ -175,8 +175,8 @@ public:
         return val < -2;
     }
 
-    inline bool isZero(float ac) {
-        return !isPositive(ac) && !isNegative(ac);
+    inline bool isZero(float val) {
+        return !isPositive(val) && !isNegative(val);
     }
 
     void readFromMeter() {
@@ -209,45 +209,31 @@ public:
     }
 
     void detectMovement() {
-        auto lastDataIndex = prevIndex(nextMeterDataIndex);
-        auto lastData = meterData[lastDataIndex];
-        auto lastMicroState = getLastDirectionData();
+        const int STILL_THRESHOLD = 2;
 
-        int currentMsIndex = prevIndex(prevIndex(nextDirectionDataIndex));
-        if (lastMicroState.direction == Direction::STILL && lastMicroState.during >= 2) {
-            DirectionData firstMicroState = directionData[currentMsIndex];
-            while (!(directionData[currentMsIndex].direction == Direction::STILL &&
-                     directionData[currentMsIndex].during >= 2)) {
-                firstMicroState = directionData[currentMsIndex];
-                currentMsIndex = prevIndex(currentMsIndex);
+        auto lastMeterDataIndex = prevIndex(nextMeterDataIndex);
+        auto lastMeterData = meterData[lastMeterDataIndex];
+
+        auto lastDirectionDataIndex = prevIndex(nextDirectionDataIndex);
+        auto lastDirectionData = directionData[lastDirectionDataIndex];
+
+        int currentDirectionDataIndex = prevIndex(lastDirectionDataIndex);
+        if (lastDirectionData.direction == Direction::STILL &&
+            lastDirectionData.during >= STILL_THRESHOLD) {
+            DirectionData firstDirectionDataAfterLastStill;
+            while (!(directionData[currentDirectionDataIndex].direction == Direction::STILL &&
+                     directionData[currentDirectionDataIndex].during >= STILL_THRESHOLD)) {
+                firstDirectionDataAfterLastStill = directionData[currentDirectionDataIndex];
+                currentDirectionDataIndex = prevIndex(currentDirectionDataIndex);
             }
-            currentMsIndex = nextIndex(currentMsIndex);
-            if (firstMicroState.isProcessed) {
+            int indexOfCurrentDirectionDataIndex = nextIndex(currentDirectionDataIndex);
+
+            if (firstDirectionDataAfterLastStill.isProcessed) {
                 return;
             }
-            switch (firstMicroState.direction) {
-                case Direction::BACKWARD:
-                    commitMoveData(Direction::BACKWARD);
-                    break;
-                case Direction::FORWARD:
-                    commitMoveData(Direction::FORWARD);
-                    break;
-                case Direction::DOWN:
-                    commitMoveData(Direction::DOWN);
-                    break;
-                case Direction::RIGHT:
-                    commitMoveData(Direction::RIGHT);
-                    break;
-                case Direction::UP:
-                    commitMoveData(Direction::UP);
-                    break;
-                case Direction::LEFT:
-                    commitMoveData(Direction::LEFT);
-                    break;
-                default:
-                    break;
-            }
-            directionData[currentMsIndex].isProcessed = true;
+
+            directionData[indexOfCurrentDirectionDataIndex].isProcessed = true;
+            commitMoveData(firstDirectionDataAfterLastStill.direction);
         }
     }
 
