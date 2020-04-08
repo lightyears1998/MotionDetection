@@ -33,7 +33,7 @@ struct DirectionData {
     int during = 1;
     bool isProcessed = false;
 
-    const static int constexpr MAX_DURING = 25;
+    const static int MAX_DURING = 25;
 };
 
 struct MoveData {
@@ -155,7 +155,8 @@ public:
             nextDirectionDataIndex = nextIndex(nextDirectionDataIndex);
         } else {
             int index = prevIndex(nextDirectionDataIndex);
-            int during = min(directionData[index].during + 1, DirectionData::MAX_DURING);
+            int maxDuring = DirectionData::MAX_DURING;
+            int during = min<int>(directionData[index].during + 1, maxDuring);
             directionData[index] = {direction, during, false};
         }
     }
