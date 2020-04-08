@@ -5,6 +5,7 @@
 #include <string>
 #include <mutex>
 #include <vector>
+#include <utility>
 #include <algorithm>
 
 #define LOG_TAG    "motion-lib"
@@ -13,7 +14,9 @@
 using std::string;
 using std::to_string;
 using std::vector;
+using std::pair;
 using std::min;
+using std::max_element;
 
 const char PACKAGE_NAME[] = "net.qfstudio.motion";
 
@@ -99,6 +102,15 @@ public:
                 Direction::RIGHT, Direction::DOWN,
                 Direction::LEFT, Direction::RIGHT,
                 Direction::DOWN, Direction::LEFT
+        });
+        registerGesture("数字4", {
+                Direction::DOWN, Direction::RIGHT, Direction::UP, Direction::DOWN, Direction::DOWN
+        });
+        registerGesture("数字5", {
+                Direction::LEFT, Direction::DOWN, Direction::RIGHT, Direction::DOWN, Direction::LEFT
+        });
+        registerGesture("字母c", {
+                Direction::FORWARD, Direction::LEFT, Direction::DOWN, Direction::RIGHT
         });
     }
 
@@ -187,7 +199,6 @@ public:
     }
 
     void readFromMeter() {
-        ALooper_pollAll(0, NULL, NULL, NULL);
         ASensorEvent event;
         while (ASensorEventQueue_getEvents(accelerometerEventQueue, &event, 1) > 0) {
             float a = SENSOR_FILTER_ALPHA;
@@ -243,28 +254,43 @@ public:
     }
 
     void detectGesture() {
-        int curMovementIndex = prevIndex(nextMoveDataIndex);
+        int currentMoveDataIndex = prevIndex(nextMoveDataIndex);
+        if (!moveData[currentMoveDataIndex].isProcessed) {
+            using GestureDirectionCountAndGestureName = pair<int, string>;
+            vector<GestureDirectionCountAndGestureName> candidates;
 
-        if (!moveData[curMovementIndex].isProcessed) {
             for (const Gesture &gesture : registeredGestures) {
                 bool matched = true;
 
-                auto move_iter = gesture.directions.rbegin();
-                for (int cur = curMovementIndex;
-                     move_iter != gesture.directions.rend(); cur = prevIndex(cur)) {
-                    if (moveData[cur].isProcessed || moveData[cur].direction != *move_iter) {
+                int moveDataIndex = currentMoveDataIndex;
+                int gestureDirectionIndex = gesture.directions.size() - 1;
+                while (matched && gestureDirectionIndex >= 0) {
+                    if (moveData[moveDataIndex].isProcessed || moveData[moveDataIndex].direction !=
+                                                               gesture.directions[gestureDirectionIndex]) {
                         matched = false;
                         break;
                     }
-                    ++move_iter;
+                    moveDataIndex = prevIndex(moveDataIndex);
+                    --gestureDirectionIndex;
                 }
 
                 if (matched) {
-                    currentGestureName = gesture.name;
-                    moveData[curMovementIndex].isProcessed = true;
-                    ++gestureCount;
-                    break;
+                    candidates.push_back({gesture.directions.size(), gesture.name});
                 }
+            }
+
+            if (candidates.size() > 0) {
+                auto gestureDirectionCountAndGestureName = *max_element(candidates.begin(),
+                                                                        candidates.end());
+                int directionCount = gestureDirectionCountAndGestureName.first;
+                string name = gestureDirectionCountAndGestureName.second;
+
+                for (int idx = currentMoveDataIndex; directionCount; idx = prevIndex(
+                        idx), --directionCount) {
+                    moveData[idx].isProcessed = true;
+                }
+                currentGestureName = name;
+                ++gestureCount;
             }
         }
     }
@@ -290,24 +316,34 @@ Java_net_qfstudio_motion_MotionLibJNI_init(JNIEnv *env, jclass clazz) {
 extern "C"
 JNIEXPORT void JNICALL
 Java_net_qfstudio_motion_MotionLibJNI_resume(JNIEnv *env, jclass clazz) {
+    (void) env;
+    (void) clazz;
+
     motionMan.resume();
 }
 
 extern "C"
 JNIEXPORT void JNICALL
 Java_net_qfstudio_motion_MotionLibJNI_pause(JNIEnv *env, jclass clazz) {
+    (void) env;
+    (void) clazz;
     motionMan.pause();
 }
 
 extern "C"
 JNIEXPORT void JNICALL
 Java_net_qfstudio_motion_MotionLibJNI_update(JNIEnv *env, jclass clazz) {
+    (void) env;
+    (void) clazz;
+    
     motionMan.update();
 }
 
 extern "C"
 JNIEXPORT jfloatArray JNICALL
 Java_net_qfstudio_motion_MotionLibJNI_getLastMeterValue(JNIEnv *env, jclass clazz) {
+    (void) clazz;
+
     auto data = motionMan.getLastMeterData();
     jfloatArray jData = env->NewFloatArray(3);
 
@@ -323,6 +359,8 @@ Java_net_qfstudio_motion_MotionLibJNI_getLastMeterValue(JNIEnv *env, jclass claz
 extern "C"
 JNIEXPORT jstring JNICALL
 Java_net_qfstudio_motion_MotionLibJNI_getLastMovement(JNIEnv *env, jclass clazz) {
+    (void) clazz;
+
     MoveData moveData = motionMan.getLastMoveData();
     string str = to_string(motionMan.getMoveDataCount()) + ":";
     switch (moveData.direction) {

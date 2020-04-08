@@ -47,6 +47,8 @@ public class MainActivity extends AppCompatActivity {
         this.timer.schedule(new TimerTask() {
             @Override
             public void run() {
+                MotionLibJNI.update();
+
                 float[] acceleration = MotionLibJNI.getLastMeterValue();
                 final String accelerationStr = String.format(
                         Locale.getDefault(),
@@ -74,8 +76,6 @@ public class MainActivity extends AppCompatActivity {
                             gestureTextView.append(" " + currentGesture);
                             lastGesture = currentGesture;
                         }
-
-                        MotionLibJNI.update();
                     }
                 });
             }
