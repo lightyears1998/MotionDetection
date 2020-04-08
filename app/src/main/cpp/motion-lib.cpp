@@ -56,7 +56,6 @@ class MotionMan {
     ASensorEventQueue *accelerometerEventQueue;
     vector<Gesture> registeredGestures;
 
-public:
     const static int LOOPER_ID = 2;
     const static int HISTORY_LENGTH = 100;
     const static int SENSOR_REFRESH_RATE_HZ = 100;
@@ -66,12 +65,12 @@ public:
 
     AccelerometerData meterData[HISTORY_LENGTH];
     AccelerometerData meterDataFilter = {0, 0, 0};
-    int nextMeterDataIndex = 0;
+    int nextMeterDataIndex = 1;
 
-    DirectionData directionData[HISTORY_LENGTH] = {{Direction::STILL, DirectionData::MAX_DURING, false}};
+    DirectionData directionData[HISTORY_LENGTH] = {{Direction::STILL, DirectionData::MAX_DURING, true}};
     int nextDirectionDataIndex = 1;
 
-    MoveData moveData[HISTORY_LENGTH] = {{Direction::STILL, false}};
+    MoveData moveData[HISTORY_LENGTH] = {{Direction::STILL, true}};
     int moveDataCount = 0;
     int nextMoveDataIndex = 1;
 
@@ -149,6 +148,14 @@ public:
         return getLastDirectionData().direction;
     }
 
+    MoveData getLastMoveData() {
+        return moveData[prevIndex(nextMoveDataIndex)];
+    }
+
+    int getMoveDataCount() {
+        return moveDataCount;
+    }
+
     void commitDirectionData(Direction direction) {
         if (direction != getLastDirection()) {
             directionData[nextDirectionDataIndex] = {direction, 1, false};
@@ -157,7 +164,7 @@ public:
             int index = prevIndex(nextDirectionDataIndex);
             int maxDuring = DirectionData::MAX_DURING;
             int during = min<int>(directionData[index].during + 1, maxDuring);
-            directionData[index] = {direction, during, false};
+            directionData[index] = {direction, during, directionData[index].isProcessed};
         }
     }
 
@@ -211,14 +218,12 @@ public:
     void detectMovement() {
         const int STILL_THRESHOLD = 2;
 
-        auto lastMeterDataIndex = prevIndex(nextMeterDataIndex);
-        auto lastMeterData = meterData[lastMeterDataIndex];
-
         auto lastDirectionDataIndex = prevIndex(nextDirectionDataIndex);
         auto lastDirectionData = directionData[lastDirectionDataIndex];
 
         int currentDirectionDataIndex = prevIndex(lastDirectionDataIndex);
-        if (lastDirectionData.direction == Direction::STILL &&
+        if (!lastDirectionData.isProcessed &&
+            lastDirectionData.direction == Direction::STILL &&
             lastDirectionData.during >= STILL_THRESHOLD) {
             DirectionData firstDirectionDataAfterLastStill;
             while (!(directionData[currentDirectionDataIndex].direction == Direction::STILL &&
@@ -318,9 +323,9 @@ Java_net_qfstudio_motion_MotionLibJNI_getLastMeterValue(JNIEnv *env, jclass claz
 extern "C"
 JNIEXPORT jstring JNICALL
 Java_net_qfstudio_motion_MotionLibJNI_getLastMovement(JNIEnv *env, jclass clazz) {
-    MoveData move = motionMan.moveData[motionMan.prevIndex(motionMan.nextMoveDataIndex)];
-    string str = to_string(motionMan.moveDataCount) + ":";
-    switch (move.direction) {
+    MoveData moveData = motionMan.getLastMoveData();
+    string str = to_string(motionMan.getMoveDataCount()) + ":";
+    switch (moveData.direction) {
         case Direction::STILL:
             str += "静止";
             break;
