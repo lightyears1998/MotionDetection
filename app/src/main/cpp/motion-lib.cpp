@@ -1,50 +1,5 @@
-#include <android/log.h>
-#include <android/asset_manager_jni.h>
-#include <android/sensor.h>
-#include <yaml-cpp/yaml.h>
+#include "motion-lib.h"
 #include <jni.h>
-#include <string>
-#include <chrono>
-#include <ratio>
-#include <vector>
-#include <utility>
-#include <algorithm>
-#include <exception>
-
-#define LOG_TAG    "motion-lib"
-#define LOG_I(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
-#define LOG_E(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
-
-const char PACKAGE_NAME[] = "net.qfstudio.motion";
-
-struct AccelerometerData {
-    float x;
-    float y;
-    float z;
-};
-
-enum struct Direction {
-    STILL = 0,
-    LEFT, RIGHT, UP, DOWN, FORWARD, BACKWARD
-};
-
-struct DirectionData {
-    Direction direction;
-    int during = 1;
-    bool isProcessed = false;
-
-    const static int MAX_DURING = 25;
-};
-
-struct MoveData {
-    Direction direction;
-    bool isProcessed = false;
-};
-
-struct Gesture {
-    std::string name;
-    std::vector<Direction> directions;
-};
 
 int gestureCount = 0;
 std::string currentGestureName = "静止";
@@ -55,13 +10,6 @@ class MotionMan {
     ALooper *looper;
     ASensorEventQueue *accelerometerEventQueue;
     std::vector<Gesture> registeredGestures;
-
-    const static int LOOPER_ID = 2;
-    const static int HISTORY_LENGTH = 100;
-    const static int SENSOR_REFRESH_RATE_HZ = 100;
-    const static int32_t constexpr SENSOR_REFRESH_PERIOD_US = int32_t(
-            1000000 / SENSOR_REFRESH_RATE_HZ);
-    const static float constexpr SENSOR_FILTER_ALPHA = 0.1f;
 
     AccelerometerData meterData[HISTORY_LENGTH];
     AccelerometerData meterDataFilter = {0, 0, 0};
@@ -152,10 +100,18 @@ public:
         accelerometer = ASensorManager_getDefaultSensor(sensorManager,
                                                         ASENSOR_TYPE_LINEAR_ACCELERATION);
         assert(accelerometer != NULL);
+        looper = ALooper_forThread();
+        if (looper != NULL) {
+            throw std::runtime_error("MotionLib must be initialized in a dedicated thread.");
+        }
+        assert(looper == NULL);
         looper = ALooper_prepare(ALOOPER_PREPARE_ALLOW_NON_CALLBACKS);
         assert(looper != NULL);
+        const int accelerometerEventId = 1;
         accelerometerEventQueue = ASensorManager_createEventQueue(sensorManager, looper,
-                                                                  LOOPER_ID, NULL, NULL);
+                                                                  accelerometerEventId,
+                                                                  NULL,
+                                                                  NULL);
         assert(accelerometerEventQueue != NULL);
         auto status = ASensorEventQueue_enableSensor(accelerometerEventQueue,
                                                      accelerometer);
@@ -171,7 +127,7 @@ public:
         initSensor();
 
         LOG_I("%s", "Successful initialized.");
-        LOG_I("Average update time: %fms.", measureAverageUpdateTimeInMilliseconds());
+        LOG_I("An update took %fms.", measureAverageUpdateTimeInMilliseconds());
     }
 
     void pause() {
@@ -355,7 +311,8 @@ MotionMan motionMan;
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_net_qfstudio_motion_MotionLibJNI_init(JNIEnv *env, jclass clazz, jobject assetManager) {
+Java_net_qfstudio_motion_MotionLibJNI_initNativeLib(JNIEnv *env, jclass clazz,
+                                                    jobject assetManager) {
     (void) env;
     (void) clazz;
 

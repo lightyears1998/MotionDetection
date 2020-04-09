@@ -7,7 +7,17 @@ public class MotionLibJNI {
         System.loadLibrary("motion-lib");
     }
 
-    public static native void init(AssetManager assetManager);
+    static void init(final AssetManager assetManager) {
+        new Thread() {
+            @Override
+            public void run() {
+                super.run();
+                initNativeLib(assetManager);
+            }
+        }.start();
+    }
+
+    private static native void initNativeLib(AssetManager assetManager);
 
     public static native void resume();
 
