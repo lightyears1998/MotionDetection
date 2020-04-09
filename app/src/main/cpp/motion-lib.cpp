@@ -4,7 +4,8 @@
 #include <yaml-cpp/yaml.h>
 #include <jni.h>
 #include <string>
-#include <mutex>
+#include <chrono>
+#include <ratio>
 #include <vector>
 #include <utility>
 #include <algorithm>
@@ -170,6 +171,7 @@ public:
         initSensor();
 
         LOG_I("%s", "Successful initialized.");
+        LOG_I("Average update time: %fms.", measureAverageUpdateTimeInMilliseconds());
     }
 
     void pause() {
@@ -263,7 +265,7 @@ public:
     }
 
     void detectMovement() {
-        const int STILL_THRESHOLD = 2;
+        const int STILL_THRESHOLD = 8;
 
         auto lastDirectionDataIndex = prevIndex(nextDirectionDataIndex);
         auto lastDirectionData = directionData[lastDirectionDataIndex];
@@ -335,6 +337,17 @@ public:
         readFromMeter();
         detectMovement();
         detectGesture();
+    }
+
+    float measureAverageUpdateTimeInMilliseconds() {
+        int repeat = 100;
+        auto start = std::chrono::high_resolution_clock::now();
+        for (int i = 0; i < repeat; ++i) {
+            update();
+        }
+        auto stop = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<float, std::milli> diff = stop - start;
+        return diff.count() / repeat;
     }
 };
 

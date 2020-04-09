@@ -79,7 +79,7 @@ public class MainActivity extends AppCompatActivity {
                     }
                 });
             }
-        }, 0, 100);
+        }, 0, 20);
     }
 
     private void cancelTimerTask() {
