@@ -5,6 +5,7 @@
 #include <android/asset_manager_jni.h>
 #include <android/sensor.h>
 #include <yaml-cpp/yaml.h>
+#include <mutex>
 #include <string>
 #include <chrono>
 #include <ratio>
@@ -18,6 +19,7 @@
 #define LOG_E(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 const char PACKAGE_NAME[] = "net.qfstudio.motion";
+const static int SENSOR_EVENT_ID = 1;
 const static int HISTORY_LENGTH = 100;
 const static int SENSOR_REFRESH_RATE_HZ = 100;
 const static int constexpr SENSOR_REFRESH_PERIOD_US = 1000000 / SENSOR_REFRESH_RATE_HZ;
@@ -51,5 +53,7 @@ struct Gesture {
     std::string name;
     std::vector<Direction> directions;
 };
+
+extern ALooper_callbackFunc sensorEventCallback;
 
 #endif // MOTION_LIB_H

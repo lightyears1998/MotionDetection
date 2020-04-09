@@ -8,6 +8,7 @@ public class MotionLibJNI {
     }
 
     static void init(final AssetManager assetManager) {
+        // TODO 添加同步机制
         new Thread() {
             @Override
             public void run() {

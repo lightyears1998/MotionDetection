@@ -105,33 +105,34 @@ public:
             throw std::runtime_error("MotionLib must be initialized in a dedicated thread.");
         }
         assert(looper == NULL);
-        looper = ALooper_prepare(ALOOPER_PREPARE_ALLOW_NON_CALLBACKS);
+        looper = ALooper_prepare(0);
         assert(looper != NULL);
         const int accelerometerEventId = 1;
         accelerometerEventQueue = ASensorManager_createEventQueue(sensorManager, looper,
                                                                   accelerometerEventId,
-                                                                  NULL,
+                                                                  sensorEventCallback,
                                                                   NULL);
         assert(accelerometerEventQueue != NULL);
-        auto status = ASensorEventQueue_enableSensor(accelerometerEventQueue,
-                                                     accelerometer);
-        assert(status >= 0);
-        status = ASensorEventQueue_setEventRate(accelerometerEventQueue,
-                                                accelerometer,
-                                                SENSOR_REFRESH_PERIOD_US);
-        assert(status >= 0);
+//        auto status = ASensorEventQueue_enableSensor(accelerometerEventQueue,
+//                                                     accelerometer);
+//        assert(status >= 0);
+//        status = ASensorEventQueue_setEventRate(accelerometerEventQueue,
+//                                                accelerometer,
+//                                                SENSOR_REFRESH_PERIOD_US);
+//        assert(status >= 0);
     }
 
     void init(AAssetManager *assetManager) {
         loadGestureFromAsset(assetManager);
         initSensor();
 
-        LOG_I("%s", "Successful initialized.");
-        LOG_I("An update took %fms.", measureAverageUpdateTimeInMilliseconds());
+        LOG_I("Initialized.");
     }
 
     void pause() {
         ASensorEventQueue_disableSensor(accelerometerEventQueue, accelerometer);
+
+        LOG_I("Paused.");
     }
 
     void resume() {
@@ -140,6 +141,8 @@ public:
                                                      accelerometer,
                                                      SENSOR_REFRESH_PERIOD_US);
         assert(status >= 0);
+
+        LOG_I("Resumed, An update took %fms.", measureAverageUpdateTimeInMilliseconds());
     }
 
     AccelerometerData getLastMeterData() {
@@ -308,6 +311,17 @@ public:
 };
 
 MotionMan motionMan;
+
+int motionMan_SensorEventCallback(int fd, int events, void *data) {
+    (void) fd;
+    (void) data;
+    assert(events == SENSOR_EVENT_ID);
+
+    motionMan.update();
+    return 1; // To continue receiving callbacks.
+}
+
+ALooper_callbackFunc sensorEventCallback = &motionMan_SensorEventCallback;
 
 extern "C"
 JNIEXPORT void JNICALL

@@ -47,7 +47,7 @@ public class MainActivity extends AppCompatActivity {
         this.timer.schedule(new TimerTask() {
             @Override
             public void run() {
-                MotionLibJNI.update();
+//                MotionLibJNI.update();
 
                 float[] acceleration = MotionLibJNI.getLastMeterValue();
                 final String accelerationStr = String.format(
