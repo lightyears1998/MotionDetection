@@ -28,7 +28,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        MotionLibJNI.init();
+        MotionLibJNI.init(getAssets());
         this.sensorValueTextView = findViewById(R.id.sensorText);
         this.meterDirectionTextView = findViewById(R.id.meterDirectionText);
         this.movementTextView = findViewById(R.id.movementText);

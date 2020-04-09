@@ -1,11 +1,13 @@
 package net.qfstudio.motion;
 
+import android.content.res.AssetManager;
+
 public class MotionLibJNI {
     static {
         System.loadLibrary("motion-lib");
     }
 
-    public static native void init();
+    public static native void init(AssetManager assetManager);
 
     public static native void resume();
 

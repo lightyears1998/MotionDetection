@@ -1,0 +1,13 @@
+# 手势名 路径
+# 可用路径：Left, Right, Up, Down, Forward, Backward
+
+- [数字1, DD]
+- [数字2, RDLDR]
+- [数字3, RDLRDL]
+- [数字4, DRUDD]
+- [数字5, LDRDL]
+- [数字6, LDDRUL]
+- [数字7, RDD]
+- [数字8, BB]
+- [数字9, RUULDR]
+- [数字0, BUB]
