@@ -1,22 +1,18 @@
 #include <android/log.h>
 #include <android/asset_manager_jni.h>
 #include <android/sensor.h>
+#include <yaml-cpp/yaml.h>
 #include <jni.h>
 #include <string>
 #include <mutex>
 #include <vector>
 #include <utility>
 #include <algorithm>
+#include <exception>
 
 #define LOG_TAG    "motion-lib"
 #define LOG_I(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
-
-using std::string;
-using std::to_string;
-using std::vector;
-using std::pair;
-using std::min;
-using std::max_element;
+#define LOG_E(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 const char PACKAGE_NAME[] = "net.qfstudio.motion";
 
@@ -45,19 +41,19 @@ struct MoveData {
 };
 
 struct Gesture {
-    string name;
-    vector<Direction> directions;
+    std::string name;
+    std::vector<Direction> directions;
 };
 
 int gestureCount = 0;
-string currentGestureName = "静止";
+std::string currentGestureName = "静止";
 
 class MotionMan {
     ASensorManager *sensorManager;
     const ASensor *accelerometer;
     ALooper *looper;
     ASensorEventQueue *accelerometerEventQueue;
-    vector<Gesture> registeredGestures;
+    std::vector<Gesture> registeredGestures;
 
     const static int LOOPER_ID = 2;
     const static int HISTORY_LENGTH = 100;
@@ -86,35 +82,70 @@ public:
         return (index + 1) % HISTORY_LENGTH;
     }
 
-    void registerGesture(const string &name, const vector<Direction> &directions) {
+    void registerGesture(const std::string &name, const std::vector<Direction> &directions) {
         registeredGestures.push_back({name, directions});
     }
 
-    MotionMan() {
-        registerGesture("数字1", {
-                Direction::DOWN, Direction::DOWN
-        });
-        registerGesture("数字2", {
-                Direction::RIGHT, Direction::DOWN, Direction::LEFT,
-                Direction::DOWN, Direction::RIGHT
-        });
-        registerGesture("数字3", {
-                Direction::RIGHT, Direction::DOWN,
-                Direction::LEFT, Direction::RIGHT,
-                Direction::DOWN, Direction::LEFT
-        });
-        registerGesture("数字4", {
-                Direction::DOWN, Direction::RIGHT, Direction::UP, Direction::DOWN, Direction::DOWN
-        });
-        registerGesture("数字5", {
-                Direction::LEFT, Direction::DOWN, Direction::RIGHT, Direction::DOWN, Direction::LEFT
-        });
-        registerGesture("字母c", {
-                Direction::FORWARD, Direction::LEFT, Direction::DOWN, Direction::RIGHT
-        });
+    void loadGestureFromAsset(AAssetManager *assetManager) {
+        const char *gestureDefinitionFilename = "gesture.yml";
+
+        AAsset *gestureAsset = AAssetManager_open(assetManager, gestureDefinitionFilename,
+                                                  AASSET_MODE_BUFFER);
+        assert(gestureAsset != NULL);
+
+        const void *gestureAssetBuf = AAsset_getBuffer(gestureAsset);
+        assert(gestureAssetBuf != NULL);
+        off_t gestureAssetLength = AAsset_getLength(gestureAsset);
+        auto gestureDefinitions = std::string(
+                (const char *) gestureAssetBuf,
+                (size_t) gestureAssetLength);
+        AAsset_close(gestureAsset);
+
+        YAML::Node gestureLists = YAML::Load(gestureDefinitions.c_str());
+        if (gestureLists.IsSequence()) {
+            try {
+                for (size_t i = 0; i < gestureLists.size(); ++i) {
+                    std::string gestureName = gestureLists[i][0].as<std::string>();
+                    std::string gestureDirectionsStr = gestureLists[i][1].as<std::string>();
+                    std::vector<Direction> gestureDirections;
+                    for (const char &dir : gestureDirectionsStr) {
+                        switch (dir) {
+                            case 'L':
+                                gestureDirections.push_back(Direction::LEFT);
+                                break;
+                            case 'R':
+                                gestureDirections.push_back(Direction::RIGHT);
+                                break;
+                            case 'U':
+                                gestureDirections.push_back(Direction::UP);
+                                break;
+                            case 'D':
+                                gestureDirections.push_back(Direction::DOWN);
+                                break;
+                            case 'F':
+                                gestureDirections.push_back(Direction::FORWARD);
+                                break;
+                            case 'B':
+                                gestureDirections.push_back(Direction::BACKWARD);
+                                break;
+                            default:
+                                throw std::exception();
+                        }
+                    }
+                    registerGesture(gestureName, gestureDirections);
+                    LOG_I("Gesture registered: %s [%s]", gestureName.c_str(),
+                          gestureDirectionsStr.c_str());
+                }
+            } catch (std::exception e) {
+                LOG_E("Error loading gesture definitions from %s.", gestureDefinitionFilename);
+                LOG_E("%s", e.what());
+            }
+        } else {
+            LOG_E("Bad gesture definition format: %s.", gestureDefinitionFilename);
+        }
     }
 
-    void init() {
+    void initSensor() {
         sensorManager = ASensorManager_getInstanceForPackage(PACKAGE_NAME);
         assert(sensorManager != NULL);
         accelerometer = ASensorManager_getDefaultSensor(sensorManager,
@@ -132,6 +163,11 @@ public:
                                                 accelerometer,
                                                 SENSOR_REFRESH_PERIOD_US);
         assert(status >= 0);
+    }
+
+    void init(AAssetManager *assetManager) {
+        loadGestureFromAsset(assetManager);
+        initSensor();
 
         LOG_I("%s", "Successful initialized.");
     }
@@ -175,7 +211,7 @@ public:
         } else {
             int index = prevIndex(nextDirectionDataIndex);
             int maxDuring = DirectionData::MAX_DURING;
-            int during = min<int>(directionData[index].during + 1, maxDuring);
+            int during = std::min<int>(directionData[index].during + 1, maxDuring);
             directionData[index] = {direction, during, directionData[index].isProcessed};
         }
     }
@@ -256,15 +292,15 @@ public:
     void detectGesture() {
         int currentMoveDataIndex = prevIndex(nextMoveDataIndex);
         if (!moveData[currentMoveDataIndex].isProcessed) {
-            using GestureDirectionCountAndGestureName = pair<int, string>;
-            vector<GestureDirectionCountAndGestureName> candidates;
+            using GestureDirectionCountAndGestureName = std::pair<int, std::string>;
+            std::vector<GestureDirectionCountAndGestureName> candidates;
 
             for (const Gesture &gesture : registeredGestures) {
                 bool matched = true;
 
                 int moveDataIndex = currentMoveDataIndex;
                 int gestureDirectionIndex = gesture.directions.size() - 1;
-                while (matched && gestureDirectionIndex >= 0) {
+                while (gestureDirectionIndex >= 0) {
                     if (moveData[moveDataIndex].isProcessed || moveData[moveDataIndex].direction !=
                                                                gesture.directions[gestureDirectionIndex]) {
                         matched = false;
@@ -280,10 +316,10 @@ public:
             }
 
             if (candidates.size() > 0) {
-                auto gestureDirectionCountAndGestureName = *max_element(candidates.begin(),
-                                                                        candidates.end());
+                auto gestureDirectionCountAndGestureName = *std::max_element(candidates.begin(),
+                                                                             candidates.end());
                 int directionCount = gestureDirectionCountAndGestureName.first;
-                string name = gestureDirectionCountAndGestureName.second;
+                std::string name = gestureDirectionCountAndGestureName.second;
 
                 for (int idx = currentMoveDataIndex; directionCount; idx = prevIndex(
                         idx), --directionCount) {
@@ -306,11 +342,12 @@ MotionMan motionMan;
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_net_qfstudio_motion_MotionLibJNI_init(JNIEnv *env, jclass clazz) {
+Java_net_qfstudio_motion_MotionLibJNI_init(JNIEnv *env, jclass clazz, jobject assetManager) {
     (void) env;
     (void) clazz;
 
-    motionMan.init();
+    AAssetManager *nativeAssetManager = AAssetManager_fromJava(env, assetManager);
+    motionMan.init(nativeAssetManager);
 }
 
 extern "C"
@@ -335,7 +372,7 @@ JNIEXPORT void JNICALL
 Java_net_qfstudio_motion_MotionLibJNI_update(JNIEnv *env, jclass clazz) {
     (void) env;
     (void) clazz;
-    
+
     motionMan.update();
 }
 
@@ -362,7 +399,7 @@ Java_net_qfstudio_motion_MotionLibJNI_getLastMovement(JNIEnv *env, jclass clazz)
     (void) clazz;
 
     MoveData moveData = motionMan.getLastMoveData();
-    string str = to_string(motionMan.getMoveDataCount()) + ":";
+    std::string str = std::to_string(motionMan.getMoveDataCount()) + ":";
     switch (moveData.direction) {
         case Direction::STILL:
             str += "静止";
@@ -393,7 +430,8 @@ extern "C"
 JNIEXPORT jstring JNICALL
 Java_net_qfstudio_motion_MotionLibJNI_getLastGesture(JNIEnv *env, jclass clazz) {
     (void) clazz;
-    string str = to_string(gestureCount) + ":" + currentGestureName;
+
+    std::string str = std::to_string(gestureCount) + ":" + currentGestureName;
     return env->NewStringUTF(str.c_str());
 }
 
@@ -404,7 +442,7 @@ Java_net_qfstudio_motion_MotionLibJNI_getLastDirection(JNIEnv *env, jclass clazz
     (void) clazz;
 
     auto data = motionMan.getLastDirectionData();
-    string str;
+    std::string str;
     switch (data.direction) {
         case Direction::STILL:
             str = "静止";
