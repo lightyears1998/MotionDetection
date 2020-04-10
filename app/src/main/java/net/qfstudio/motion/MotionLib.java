@@ -12,35 +12,33 @@ public class MotionLib {
     private boolean isInitialized = false;
     private MotionLibEventHandler handler;
 
-    MotionLib(final AssetManager assetManager) {
+    public MotionLib(final AssetManager assetManager) {
         try {
-            final Object lock = new Object();
-
             new Thread() {
                 @Override
                 public void run() {
                     Looper.prepare();
 
-                    synchronized (lock) {
+                    synchronized (MotionLib.this) {
                         initUnderlyingNativeLib(assetManager);
                         MotionLib.this.isInitialized = true;
-                        lock.notifyAll();
+                        MotionLib.this.notifyAll();
                     }
 
                     Looper.loop();
                 }
             }.start();
 
-            synchronized (lock) {
+            synchronized (this) {
                 while (!this.isInitialized) {
-                    lock.wait();
+                    this.wait();
                 }
             }
         } catch (InterruptedException ignored) {
         }
     }
 
-    void setHandler(MotionLibEventHandler handler) {
+    public void setHandler(MotionLibEventHandler handler) {
         this.handler = handler;
     }
 
@@ -52,7 +50,7 @@ public class MotionLib {
 
     public native void update();
 
-    public native float[] getLastMeterValue();
+    public native float[] getLastMeterReadings();
 
     public native String getLastDirection();
 
@@ -64,20 +62,17 @@ public class MotionLib {
         if (this.handler != null) {
             handler.onDirectionChanged(direction);
         }
-        System.out.println("Having fun wiht you! a");
     }
 
     private void handleMovementDetected(String movement) {
         if (this.handler != null) {
             handler.onMovementDetected(movement);
         }
-        System.out.println("Having fun wiht you! b");
     }
 
     private void handleGestureDetected(String gestureName) {
         if (this.handler != null) {
             handler.onGestureDetected(gestureName);
         }
-        System.out.println("Having fun wiht you! c");
     }
 }

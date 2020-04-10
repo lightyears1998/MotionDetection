@@ -4,5 +4,5 @@
     <string name="txtGesture">手势识别结果\n</string>
     <string name="txtMovement">移动识别结果\n</string>
     <string name="txtMeterDirection">加速度方向\n</string>
-    <string name="txtSensor">传感器状态</string>
+    <string name="txtMeterReadingsPlaceholder">传感器读数</string>
 </resources>

@@ -1,8 +1,6 @@
 #include "motion-lib.h"
 #include <jni.h>
 
-int gestureCount = 0;
-std::string currentGestureName = "静止";
 
 class MotionMan {
     JNIEnv *jniEnv;
@@ -17,16 +15,21 @@ class MotionMan {
     ASensorEventQueue *accelerometerEventQueue;
     std::vector<Gesture> registeredGestures;
 
-    AccelerometerData meterData[HISTORY_LENGTH];
-    AccelerometerData meterDataFilter = {0, 0, 0};
-    int nextMeterDataIndex = 1;
+    AccelerometerReadings accelerometerReadings[HISTORY_LENGTH];
+    AccelerometerReadings accelerometerReadingsFilter = {0, 0, 0};
+    int nextAccelerometerReadingsIndex = 1;
 
-    DirectionData directionData[HISTORY_LENGTH] = {{Direction::STILL, DirectionData::MAX_DURING, true}};
-    int nextDirectionDataIndex = 1;
+    AccelerationDirectionData accelerationDirectionData[HISTORY_LENGTH] = {
+            {Direction::STILL, AccelerationDirectionData::MAX_DURING, true}
+    };
+    int nextAccelerationDirectionDataIndex = 1;
 
-    MoveData moveData[HISTORY_LENGTH] = {{Direction::STILL, true}};
-    int moveDataCount = 0;
-    int nextMoveDataIndex = 1;
+    int recognizedMoveDirectionCount = 0;
+    MoveDirectionData moveDirectionData[HISTORY_LENGTH] = {{Direction::STILL, true}};
+    int nextMoveDirectionDataIndex = 1;
+
+    int recognizedGestureCount = 0;
+    std::string lastRecognizedGestureName = "静止";
 
 public:
     inline int prevIndex(int index) {
@@ -37,33 +40,33 @@ public:
         return (index + 1) % HISTORY_LENGTH;
     }
 
-    void registerGesture(const std::string &name, const std::vector<Direction> &directions) {
+    inline void registerGesture(const std::string &name, const std::vector<Direction> &directions) {
         registeredGestures.push_back({name, directions});
     }
 
-    void loadGestureFromAsset(AAssetManager *assetManager) {
-        const char *gestureDefinitionFilename = "gesture.yml";
+    void readGestureDefinitionFromAsset(AAssetManager *assetManager) {
+        const char *gestureAssetFilename = "gesture.yml";
 
-        AAsset *gestureAsset = AAssetManager_open(assetManager, gestureDefinitionFilename,
+        AAsset *gestureAsset = AAssetManager_open(assetManager, gestureAssetFilename,
                                                   AASSET_MODE_BUFFER);
         assert(gestureAsset != NULL);
 
         const void *gestureAssetBuf = AAsset_getBuffer(gestureAsset);
         assert(gestureAssetBuf != NULL);
         off_t gestureAssetLength = AAsset_getLength(gestureAsset);
-        auto gestureDefinitions = std::string(
+        auto gestureDefinitionsString = std::string(
                 (const char *) gestureAssetBuf,
                 (size_t) gestureAssetLength);
         AAsset_close(gestureAsset);
 
-        YAML::Node gestureLists = YAML::Load(gestureDefinitions.c_str());
-        if (gestureLists.IsSequence()) {
+        YAML::Node gestureDefinitions = YAML::Load(gestureDefinitionsString.c_str());
+        if (gestureDefinitions.IsSequence()) {
             try {
-                for (size_t i = 0; i < gestureLists.size(); ++i) {
-                    std::string gestureName = gestureLists[i][0].as<std::string>();
-                    std::string gestureDirectionsStr = gestureLists[i][1].as<std::string>();
+                for (size_t i = 0; i < gestureDefinitions.size(); ++i) {
+                    std::string gestureName = gestureDefinitions[i][0].as<std::string>();
+                    std::string gestureDirectionsString = gestureDefinitions[i][1].as<std::string>();
                     std::vector<Direction> gestureDirections;
-                    for (const char &dir : gestureDirectionsStr) {
+                    for (const char &dir : gestureDirectionsString) {
                         switch (dir) {
                             case 'L':
                                 gestureDirections.push_back(Direction::LEFT);
@@ -89,14 +92,15 @@ public:
                     }
                     registerGesture(gestureName, gestureDirections);
                     LOG_I("Gesture registered: %s [%s]", gestureName.c_str(),
-                          gestureDirectionsStr.c_str());
+                          gestureDirectionsString.c_str());
                 }
             } catch (std::exception e) {
-                LOG_E("Error loading gesture definitions from %s.", gestureDefinitionFilename);
+                LOG_E("An error was encountered when reading gesture definitions from file %s.",
+                      gestureAssetFilename);
                 LOG_E("%s", e.what());
             }
         } else {
-            LOG_E("Bad gesture definition format: %s.", gestureDefinitionFilename);
+            LOG_E("Bad gesture definitions file format: %s.", gestureAssetFilename);
         }
     }
 
@@ -120,16 +124,16 @@ public:
         this->jniEnv = env;
         this->jLib = env->NewGlobalRef(jLib);
         jclass clazz = env->GetObjectClass(this->jLib);
-        jMethodIdHandleDirectionChange = env->GetMethodID(clazz, "handleDirectionChange",
-                                                          "(Ljava/lang/String;)V");
-        jMethodIdHandleMovementDetected = env->GetMethodID(clazz, "handleMovementDetected",
-                                                           "(Ljava/lang/String;)V");
-        jMethodIdHandleGestureDetected = env->GetMethodID(clazz, "handleGestureDetected",
-                                                          "(Ljava/lang/String;)V");
+        this->jMethodIdHandleDirectionChange = env->GetMethodID(clazz, "handleDirectionChange",
+                                                                "(Ljava/lang/String;)V");
+        this->jMethodIdHandleMovementDetected = env->GetMethodID(clazz, "handleMovementDetected",
+                                                                 "(Ljava/lang/String;)V");
+        this->jMethodIdHandleGestureDetected = env->GetMethodID(clazz, "handleGestureDetected",
+                                                                "(Ljava/lang/String;)V");
     }
 
     void init(AAssetManager *assetManager, JNIEnv *env, jobject jLib) {
-        loadGestureFromAsset(assetManager);
+        readGestureDefinitionFromAsset(assetManager);
         initJNIEnv(env, jLib);
         initSensor();
 
@@ -152,44 +156,46 @@ public:
         LOG_I("Resumed, An update took %fms.", measureAverageUpdateTimeInMilliseconds());
     }
 
-    AccelerometerData getLastMeterData() {
-        return meterData[prevIndex(nextMeterDataIndex)];
+    AccelerometerReadings getLastAccelerometerReadings() {
+        return accelerometerReadings[prevIndex(nextAccelerometerReadingsIndex)];
     }
 
-    DirectionData getLastDirectionData() {
-        return directionData[prevIndex(nextDirectionDataIndex)];
+    AccelerationDirectionData getLastAccelerationDirectionData() {
+        return accelerationDirectionData[prevIndex(nextAccelerationDirectionDataIndex)];
     };
 
-    Direction getLastDirection() {
-        return getLastDirectionData().direction;
+    Direction getLastAccelerationDirection() {
+        return getLastAccelerationDirectionData().direction;
     }
 
-    MoveData getLastMoveData() {
-        return moveData[prevIndex(nextMoveDataIndex)];
+    MoveDirectionData getLastMoveDirectionData() {
+        return moveDirectionData[prevIndex(nextMoveDirectionDataIndex)];
     }
 
-    int getMoveDataCount() {
-        return moveDataCount;
+    std::string getLastRecognizedGestureName() {
+        return lastRecognizedGestureName;
     }
 
-    void commitDirectionData(Direction direction) {
-        if (direction != getLastDirection()) {
-            directionData[nextDirectionDataIndex] = {direction, 1, false};
-            callJavaHandleDirectionChange(directionData[nextDirectionDataIndex]);
-            nextDirectionDataIndex = nextIndex(nextDirectionDataIndex);
+    void commitAccelerationDirectionData(Direction direction) {
+        if (direction != getLastAccelerationDirection()) {
+            accelerationDirectionData[nextAccelerationDirectionDataIndex] = {direction, 1, false};
+            invokeDirectionChangeHandlerJava(
+                    accelerationDirectionData[nextAccelerationDirectionDataIndex]);
+            nextAccelerationDirectionDataIndex = nextIndex(nextAccelerationDirectionDataIndex);
         } else {
-            int index = prevIndex(nextDirectionDataIndex);
-            int maxDuring = DirectionData::MAX_DURING;
-            int during = std::min<int>(directionData[index].during + 1, maxDuring);
-            directionData[index] = {direction, during, directionData[index].isProcessed};
+            int index = prevIndex(nextAccelerationDirectionDataIndex);
+            int maxDuring = AccelerationDirectionData::MAX_DURING;
+            int during = std::min<int>(accelerationDirectionData[index].during + 1, maxDuring);
+            accelerationDirectionData[index] = {direction, during,
+                                                accelerationDirectionData[index].isProcessed};
         }
     }
 
-    void commitMoveData(Direction direction) {
-        moveData[nextMoveDataIndex] = {direction, false};
-        callJavaHandleMovementDetected(moveData[nextMoveDataIndex]);
-        nextMoveDataIndex = nextIndex(nextMoveDataIndex);
-        moveDataCount++;
+    void commitMoveDirectionData(Direction direction) {
+        moveDirectionData[nextMoveDirectionDataIndex] = {direction, false};
+        invokeMovementDetectedHandlerJava(moveDirectionData[nextMoveDirectionDataIndex]);
+        nextMoveDirectionDataIndex = nextIndex(nextMoveDirectionDataIndex);
+        recognizedMoveDirectionCount++;
     }
 
     inline bool isPositive(float val) {
@@ -204,48 +210,54 @@ public:
         return !isPositive(val) && !isNegative(val);
     }
 
-    void readFromMeter() {
+    void readFromAccelerometer() {
         ASensorEvent event;
         while (ASensorEventQueue_getEvents(accelerometerEventQueue, &event, 1) > 0) {
             float a = SENSOR_FILTER_ALPHA;
-            meterDataFilter.x = a * event.acceleration.x + (1.0f - a) * meterDataFilter.x;
-            meterDataFilter.y = a * event.acceleration.y + (1.0f - a) * meterDataFilter.y;
-            meterDataFilter.z = a * event.acceleration.z + (1.0f - a) * meterDataFilter.z;
+            accelerometerReadingsFilter.x =
+                    a * event.acceleration.x + (1.0f - a) * accelerometerReadingsFilter.x;
+            accelerometerReadingsFilter.y =
+                    a * event.acceleration.y + (1.0f - a) * accelerometerReadingsFilter.y;
+            accelerometerReadingsFilter.z =
+                    a * event.acceleration.z + (1.0f - a) * accelerometerReadingsFilter.z;
         }
-        meterData[nextMeterDataIndex] = meterDataFilter;
-        nextMeterDataIndex = (nextMeterDataIndex + 1) % HISTORY_LENGTH;
+        accelerometerReadings[nextAccelerometerReadingsIndex] = accelerometerReadingsFilter;
+        nextAccelerometerReadingsIndex = (nextAccelerometerReadingsIndex + 1) % HISTORY_LENGTH;
 
-        if (isZero(meterDataFilter.x) && isZero(meterDataFilter.y) && isZero(meterDataFilter.z)) {
-            commitDirectionData(Direction::STILL);
-        } else if (isNegative(meterDataFilter.x)) {
-            commitDirectionData(Direction::LEFT);
-        } else if (isPositive(meterDataFilter.x)) {
-            commitDirectionData(Direction::RIGHT);
-        } else if (isNegative(meterDataFilter.y)) {
-            commitDirectionData(Direction::BACKWARD);
-        } else if (isPositive(meterDataFilter.y)) {
-            commitDirectionData(Direction::FORWARD);
-        } else if (isNegative(meterDataFilter.z)) {
-            commitDirectionData(Direction::DOWN);
-        } else if (isPositive(meterDataFilter.z)) {
-            commitDirectionData(Direction::UP);
+        if (isZero(accelerometerReadingsFilter.x) && isZero(accelerometerReadingsFilter.y) &&
+            isZero(accelerometerReadingsFilter.z)) {
+            commitAccelerationDirectionData(Direction::STILL);
+        } else if (isNegative(accelerometerReadingsFilter.x)) {
+            commitAccelerationDirectionData(Direction::LEFT);
+        } else if (isPositive(accelerometerReadingsFilter.x)) {
+            commitAccelerationDirectionData(Direction::RIGHT);
+        } else if (isNegative(accelerometerReadingsFilter.y)) {
+            commitAccelerationDirectionData(Direction::BACKWARD);
+        } else if (isPositive(accelerometerReadingsFilter.y)) {
+            commitAccelerationDirectionData(Direction::FORWARD);
+        } else if (isNegative(accelerometerReadingsFilter.z)) {
+            commitAccelerationDirectionData(Direction::DOWN);
+        } else if (isPositive(accelerometerReadingsFilter.z)) {
+            commitAccelerationDirectionData(Direction::UP);
         }
     }
 
     void detectMovement() {
         const int STILL_THRESHOLD = 8;
 
-        auto lastDirectionDataIndex = prevIndex(nextDirectionDataIndex);
-        auto lastDirectionData = directionData[lastDirectionDataIndex];
+        auto lastDirectionDataIndex = prevIndex(nextAccelerationDirectionDataIndex);
+        auto lastDirectionData = accelerationDirectionData[lastDirectionDataIndex];
 
         int currentDirectionDataIndex = prevIndex(lastDirectionDataIndex);
         if (!lastDirectionData.isProcessed &&
             lastDirectionData.direction == Direction::STILL &&
             lastDirectionData.during >= STILL_THRESHOLD) {
-            DirectionData firstDirectionDataAfterLastStill;
-            while (!(directionData[currentDirectionDataIndex].direction == Direction::STILL &&
-                     directionData[currentDirectionDataIndex].during >= STILL_THRESHOLD)) {
-                firstDirectionDataAfterLastStill = directionData[currentDirectionDataIndex];
+            AccelerationDirectionData firstDirectionDataAfterLastStill;
+            while (!(accelerationDirectionData[currentDirectionDataIndex].direction ==
+                     Direction::STILL &&
+                     accelerationDirectionData[currentDirectionDataIndex].during >=
+                     STILL_THRESHOLD)) {
+                firstDirectionDataAfterLastStill = accelerationDirectionData[currentDirectionDataIndex];
                 currentDirectionDataIndex = prevIndex(currentDirectionDataIndex);
             }
             int indexOfCurrentDirectionDataIndex = nextIndex(currentDirectionDataIndex);
@@ -254,14 +266,14 @@ public:
                 return;
             }
 
-            directionData[indexOfCurrentDirectionDataIndex].isProcessed = true;
-            commitMoveData(firstDirectionDataAfterLastStill.direction);
+            accelerationDirectionData[indexOfCurrentDirectionDataIndex].isProcessed = true;
+            commitMoveDirectionData(firstDirectionDataAfterLastStill.direction);
         }
     }
 
     void detectGesture() {
-        int currentMoveDataIndex = prevIndex(nextMoveDataIndex);
-        if (!moveData[currentMoveDataIndex].isProcessed) {
+        int currentMoveDataIndex = prevIndex(nextMoveDirectionDataIndex);
+        if (!moveDirectionData[currentMoveDataIndex].isProcessed) {
             using GestureDirectionCountAndGestureName = std::pair<int, std::string>;
             std::vector<GestureDirectionCountAndGestureName> candidates;
 
@@ -271,8 +283,9 @@ public:
                 int moveDataIndex = currentMoveDataIndex;
                 int gestureDirectionIndex = gesture.directions.size() - 1;
                 while (gestureDirectionIndex >= 0) {
-                    if (moveData[moveDataIndex].isProcessed || moveData[moveDataIndex].direction !=
-                                                               gesture.directions[gestureDirectionIndex]) {
+                    if (moveDirectionData[moveDataIndex].isProcessed ||
+                        moveDirectionData[moveDataIndex].direction !=
+                        gesture.directions[gestureDirectionIndex]) {
                         matched = false;
                         break;
                     }
@@ -293,17 +306,17 @@ public:
 
                 for (int idx = currentMoveDataIndex; directionCount; idx = prevIndex(
                         idx), --directionCount) {
-                    moveData[idx].isProcessed = true;
+                    moveDirectionData[idx].isProcessed = true;
                 }
-                currentGestureName = name;
-                callJavaHandleGestureDetected(currentGestureName);
-                ++gestureCount;
+                lastRecognizedGestureName = name;
+                invokeGestureDetectedHandlerJava(lastRecognizedGestureName);
+                ++recognizedGestureCount;
             }
         }
     }
 
     void update() {
-        readFromMeter();
+        readFromAccelerometer();
         detectMovement();
         detectGesture();
     }
@@ -319,17 +332,17 @@ public:
         return diff.count() / repeat;
     }
 
-    void callJavaHandleDirectionChange(const DirectionData &directionData) {
+    void invokeDirectionChangeHandlerJava(const AccelerationDirectionData &directionData) {
         jstring direction = jniEnv->NewStringUTF(directionData.toString().c_str());
         jniEnv->CallVoidMethod(jLib, jMethodIdHandleDirectionChange, direction);
     }
 
-    void callJavaHandleMovementDetected(const MoveData &moveData) {
+    void invokeMovementDetectedHandlerJava(const MoveDirectionData &moveData) {
         jstring movement = jniEnv->NewStringUTF(moveData.toString().c_str());
         jniEnv->CallVoidMethod(jLib, jMethodIdHandleMovementDetected, movement);
     }
 
-    void callJavaHandleGestureDetected(const std::string &gestureName) {
+    void invokeGestureDetectedHandlerJava(const std::string &gestureName) {
         jstring jGestureName = jniEnv->NewStringUTF(gestureName.c_str());
         jniEnv->CallVoidMethod(jLib, jMethodIdHandleGestureDetected, jGestureName);
     }
@@ -386,10 +399,10 @@ Java_net_qfstudio_motion_MotionLib_update(JNIEnv *env, jobject clazz) {
 
 extern "C"
 JNIEXPORT jfloatArray JNICALL
-Java_net_qfstudio_motion_MotionLib_getLastMeterValue(JNIEnv *env, jobject clazz) {
+Java_net_qfstudio_motion_MotionLib_getLastMeterReadings(JNIEnv *env, jobject clazz) {
     (void) clazz;
 
-    auto data = motionMan.getLastMeterData();
+    auto data = motionMan.getLastAccelerometerReadings();
     jfloatArray jData = env->NewFloatArray(3);
 
     jfloat buf[3];
@@ -406,7 +419,7 @@ JNIEXPORT jstring JNICALL
 Java_net_qfstudio_motion_MotionLib_getLastMovement(JNIEnv *env, jobject clazz) {
     (void) clazz;
 
-    MoveData moveData = motionMan.getLastMoveData();
+    MoveDirectionData moveData = motionMan.getLastMoveDirectionData();
     return env->NewStringUTF(moveData.toString().c_str());
 }
 
@@ -415,8 +428,7 @@ JNIEXPORT jstring JNICALL
 Java_net_qfstudio_motion_MotionLib_getLastGesture(JNIEnv *env, jobject clazz) {
     (void) clazz;
 
-    std::string str = std::to_string(gestureCount) + ":" + currentGestureName;
-    return env->NewStringUTF(str.c_str());
+    return env->NewStringUTF(motionMan.getLastRecognizedGestureName().c_str());
 }
 
 extern "C"
@@ -425,6 +437,6 @@ Java_net_qfstudio_motion_MotionLib_getLastDirection(JNIEnv *env, jobject clazz) 
     (void) env;
     (void) clazz;
 
-    auto data = motionMan.getLastDirectionData();
+    auto data = motionMan.getLastAccelerationDirectionData();
     return env->NewStringUTF(data.toString().c_str());
 }

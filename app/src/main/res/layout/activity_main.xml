@@ -4,7 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".MainActivity">
+    tools:context=".demo.MainActivity">
 
     <Button
         android:id="@+id/btnClearScreen"
@@ -19,7 +19,19 @@
         app:layout_constraintStart_toStartOf="parent" />
 
     <TextView
-        android:id="@+id/meterDirectionText"
+        android:id="@+id/txtMeterReadings"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="8dp"
+        android:layout_marginStart="8dp"
+        android:layout_marginTop="16dp"
+        android:text="@string/txtMeterReadingsPlaceholder"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
+        android:id="@+id/txtAccelerationDirections"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginEnd="16dp"
@@ -28,10 +40,10 @@
         android:text="@string/txtMeterDirection"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/sensorText" />
+        app:layout_constraintTop_toBottomOf="@+id/txtMeterReadings" />
 
     <TextView
-        android:id="@+id/movementText"
+        android:id="@+id/txtMovementDirections"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginEnd="16dp"
@@ -40,10 +52,10 @@
         android:text="@string/txtMovement"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/meterDirectionText" />
+        app:layout_constraintTop_toBottomOf="@+id/txtAccelerationDirections" />
 
     <TextView
-        android:id="@+id/gestureText"
+        android:id="@+id/txtGestureNames"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginEnd="16dp"
@@ -52,18 +64,6 @@
         android:text="@string/txtGesture"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/movementText" />
-
-    <TextView
-        android:id="@+id/sensorText"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginEnd="8dp"
-        android:layout_marginStart="8dp"
-        android:layout_marginTop="16dp"
-        android:text="@string/txtSensor"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toBottomOf="@+id/txtMovementDirections" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
