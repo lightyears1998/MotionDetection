@@ -39,6 +39,9 @@ public class MainActivity extends AppCompatActivity {
                     String text = String.format(Locale.getDefault(), " %d:%s",
                             receivedAccelerationDirectionCount++,
                             direction);
+                    if (receivedAccelerationDirectionCount % 20 == 0) {
+                        accelerationDirectionTextView.setText(R.string.txtAccelerationDirection);
+                    }
                     accelerationDirectionTextView.append(text);
                 }
             });
@@ -52,6 +55,9 @@ public class MainActivity extends AppCompatActivity {
                     String text = String.format(Locale.getDefault(), " %d:%s",
                             receivedMovementDirectionCount++,
                             movement);
+                    if (receivedMovementDirectionCount % 20 == 0) {
+                        movementDirectionTextView.setText(R.string.txtMovementDirection);
+                    }
                     movementDirectionTextView.append(text);
                 }
             });
@@ -137,8 +143,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     void clearScreen() {
-        this.accelerationDirectionTextView.setText(R.string.txtMeterDirection);
-        this.movementDirectionTextView.setText(R.string.txtMovement);
-        this.gestureTextView.setText(R.string.txtGesture);
+        this.accelerationDirectionTextView.setText(R.string.txtAccelerationDirection);
+        this.movementDirectionTextView.setText(R.string.txtMovementDirection);
+        this.gestureTextView.setText(R.string.txtRecognizedGesture);
     }
 }

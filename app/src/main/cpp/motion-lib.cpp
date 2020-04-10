@@ -19,6 +19,7 @@ class MotionMan {
     AccelerometerReadings accelerometerReadingsFilter = {0, 0, 0};
     int nextAccelerometerReadingsIndex = 1;
 
+
     AccelerationDirectionData accelerationDirectionData[HISTORY_LENGTH] = {
             {Direction::STILL, AccelerationDirectionData::MAX_DURING, true}
     };
@@ -137,13 +138,13 @@ public:
         initJNIEnv(env, jLib);
         initSensor();
 
-        LOG_I("Initialized.");
+        LOG_V("Initialized.");
     }
 
     void pause() {
         ASensorEventQueue_disableSensor(accelerometerEventQueue, accelerometer);
 
-        LOG_I("Paused.");
+        LOG_V("Paused.");
     }
 
     void resume() {
@@ -153,7 +154,7 @@ public:
                                                      SENSOR_REFRESH_PERIOD_US);
         assert(status >= 0);
 
-        LOG_I("Resumed, An update took %fms.", measureAverageUpdateTimeInMilliseconds());
+        LOG_V("Resumed.");
     }
 
     AccelerometerReadings getLastAccelerometerReadings() {
@@ -314,20 +315,15 @@ public:
     }
 
     void update() {
+        auto start = std::chrono::high_resolution_clock::now();
+
         readFromAccelerometer();
         detectMovement();
         detectGesture();
-    }
 
-    float measureAverageUpdateTimeInMilliseconds() {
-        int repeat = 100;
-        auto start = std::chrono::high_resolution_clock::now();
-        for (int i = 0; i < repeat; ++i) {
-            update();
-        }
         auto stop = std::chrono::high_resolution_clock::now();
         std::chrono::duration<float, std::milli> diff = stop - start;
-        return diff.count() / repeat;
+        LOG_V("An update took %fms.", diff.count());
     }
 
     void invokeDirectionChangeJNIHandler(const AccelerationDirectionData &directionData) {

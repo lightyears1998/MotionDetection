@@ -1,8 +1,8 @@
 <resources>
     <string name="app_name">MotionDetection</string>
     <string name="btnClearScreen">清屏</string>
-    <string name="txtGesture">手势识别结果\n</string>
-    <string name="txtMovement">移动识别结果\n</string>
-    <string name="txtMeterDirection">加速度方向\n</string>
-    <string name="txtMeterReadingsPlaceholder">传感器读数</string>
+    <string name="txtRecognizedGesture">手势识别结果\n</string>
+    <string name="txtMovementDirection">移动识别结果\n</string>
+    <string name="txtAccelerationDirection">加速度方向\n</string>
+    <string name="txtAccelerometerReadingsPlaceholder">传感器读数</string>
 </resources>
