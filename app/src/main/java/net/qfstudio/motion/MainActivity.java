@@ -13,6 +13,8 @@ import androidx.appcompat.app.AppCompatActivity;
 
 public class MainActivity extends AppCompatActivity {
 
+    private MotionLib motion;
+
     private Timer timer;
     private TextView sensorValueTextView;
     private TextView meterDirectionTextView;
@@ -28,7 +30,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        MotionLibJNI.init(getAssets());
+        this.motion = new MotionLib(getAssets());
         this.sensorValueTextView = findViewById(R.id.sensorText);
         this.meterDirectionTextView = findViewById(R.id.meterDirectionText);
         this.movementTextView = findViewById(R.id.movementText);
@@ -49,16 +51,16 @@ public class MainActivity extends AppCompatActivity {
             public void run() {
 //                MotionLibJNI.update();
 
-                float[] acceleration = MotionLibJNI.getLastMeterValue();
+                float[] acceleration = motion.getLastMeterValue();
                 final String accelerationStr = String.format(
                         Locale.getDefault(),
                         "x: %f\ny: %f\nz: %f\n",
                         acceleration[0], acceleration[1], acceleration[2]
                 );
 
-                final String currentMicroState = MotionLibJNI.getLastDirection();
-                final String currentMovement = MotionLibJNI.getLastMovement();
-                final String currentGesture = MotionLibJNI.getLastGesture();
+                final String currentMicroState = motion.getLastDirection();
+                final String currentMovement = motion.getLastMovement();
+                final String currentGesture = motion.getLastGesture();
 
                 runOnUiThread(new Runnable() {
                     @Override
@@ -93,7 +95,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
 
-        MotionLibJNI.resume();
+        motion.resume();
         this.setTimerTask();
     }
 
@@ -101,7 +103,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onPause() {
         super.onPause();
 
-        MotionLibJNI.pause();
+        motion.pause();
         this.cancelTimerTask();
     }
 

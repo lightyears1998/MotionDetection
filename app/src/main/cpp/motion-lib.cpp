@@ -101,15 +101,15 @@ public:
                                                         ASENSOR_TYPE_LINEAR_ACCELERATION);
         assert(accelerometer != NULL);
         looper = ALooper_forThread();
-        if (looper != NULL) {
-            throw std::runtime_error("MotionLib must be initialized in a dedicated thread.");
-        }
-        assert(looper == NULL);
-        looper = ALooper_prepare(0);
+//        if (looper != NULL) {
+//            throw std::runtime_error("MotionLib must be initialized in a dedicated thread.");
+//        }
+//        assert(looper == NULL);
+//        looper = ALooper_prepare(0);
         assert(looper != NULL);
-        const int accelerometerEventId = 1;
+
         accelerometerEventQueue = ASensorManager_createEventQueue(sensorManager, looper,
-                                                                  accelerometerEventId,
+                                                                  ALOOPER_POLL_CALLBACK,
                                                                   sensorEventCallback,
                                                                   NULL);
         assert(accelerometerEventQueue != NULL);
@@ -314,8 +314,8 @@ MotionMan motionMan;
 
 int motionMan_SensorEventCallback(int fd, int events, void *data) {
     (void) fd;
+    (void) events;
     (void) data;
-    assert(events == SENSOR_EVENT_ID);
 
     motionMan.update();
     return 1; // To continue receiving callbacks.
@@ -325,8 +325,8 @@ ALooper_callbackFunc sensorEventCallback = &motionMan_SensorEventCallback;
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_net_qfstudio_motion_MotionLibJNI_initNativeLib(JNIEnv *env, jclass clazz,
-                                                    jobject assetManager) {
+Java_net_qfstudio_motion_MotionLib_initUnderlyingNativeCode(JNIEnv *env, jobject clazz,
+                                                            jobject assetManager) {
     (void) env;
     (void) clazz;
 
@@ -336,7 +336,7 @@ Java_net_qfstudio_motion_MotionLibJNI_initNativeLib(JNIEnv *env, jclass clazz,
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_net_qfstudio_motion_MotionLibJNI_resume(JNIEnv *env, jclass clazz) {
+Java_net_qfstudio_motion_MotionLib_resume(JNIEnv *env, jobject clazz) {
     (void) env;
     (void) clazz;
 
@@ -345,7 +345,7 @@ Java_net_qfstudio_motion_MotionLibJNI_resume(JNIEnv *env, jclass clazz) {
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_net_qfstudio_motion_MotionLibJNI_pause(JNIEnv *env, jclass clazz) {
+Java_net_qfstudio_motion_MotionLib_pause(JNIEnv *env, jobject clazz) {
     (void) env;
     (void) clazz;
     motionMan.pause();
@@ -353,7 +353,7 @@ Java_net_qfstudio_motion_MotionLibJNI_pause(JNIEnv *env, jclass clazz) {
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_net_qfstudio_motion_MotionLibJNI_update(JNIEnv *env, jclass clazz) {
+Java_net_qfstudio_motion_MotionLib_update(JNIEnv *env, jobject clazz) {
     (void) env;
     (void) clazz;
 
@@ -362,7 +362,7 @@ Java_net_qfstudio_motion_MotionLibJNI_update(JNIEnv *env, jclass clazz) {
 
 extern "C"
 JNIEXPORT jfloatArray JNICALL
-Java_net_qfstudio_motion_MotionLibJNI_getLastMeterValue(JNIEnv *env, jclass clazz) {
+Java_net_qfstudio_motion_MotionLib_getLastMeterValue(JNIEnv *env, jobject clazz) {
     (void) clazz;
 
     auto data = motionMan.getLastMeterData();
@@ -379,7 +379,7 @@ Java_net_qfstudio_motion_MotionLibJNI_getLastMeterValue(JNIEnv *env, jclass claz
 
 extern "C"
 JNIEXPORT jstring JNICALL
-Java_net_qfstudio_motion_MotionLibJNI_getLastMovement(JNIEnv *env, jclass clazz) {
+Java_net_qfstudio_motion_MotionLib_getLastMovement(JNIEnv *env, jobject clazz) {
     (void) clazz;
 
     MoveData moveData = motionMan.getLastMoveData();
@@ -412,7 +412,7 @@ Java_net_qfstudio_motion_MotionLibJNI_getLastMovement(JNIEnv *env, jclass clazz)
 
 extern "C"
 JNIEXPORT jstring JNICALL
-Java_net_qfstudio_motion_MotionLibJNI_getLastGesture(JNIEnv *env, jclass clazz) {
+Java_net_qfstudio_motion_MotionLib_getLastGesture(JNIEnv *env, jobject clazz) {
     (void) clazz;
 
     std::string str = std::to_string(gestureCount) + ":" + currentGestureName;
@@ -421,7 +421,7 @@ Java_net_qfstudio_motion_MotionLibJNI_getLastGesture(JNIEnv *env, jclass clazz) 
 
 extern "C"
 JNIEXPORT jstring JNICALL
-Java_net_qfstudio_motion_MotionLibJNI_getLastDirection(JNIEnv *env, jclass clazz) {
+Java_net_qfstudio_motion_MotionLib_getLastDirection(JNIEnv *env, jobject clazz) {
     (void) env;
     (void) clazz;
 
