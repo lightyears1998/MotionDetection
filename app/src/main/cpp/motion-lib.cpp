@@ -179,7 +179,7 @@ public:
     void commitAccelerationDirectionData(Direction direction) {
         if (direction != getLastAccelerationDirection()) {
             accelerationDirectionData[nextAccelerationDirectionDataIndex] = {direction, 1, false};
-            invokeDirectionChangeHandlerJava(
+            invokeDirectionChangeJNIHandler(
                     accelerationDirectionData[nextAccelerationDirectionDataIndex]);
             nextAccelerationDirectionDataIndex = nextIndex(nextAccelerationDirectionDataIndex);
         } else {
@@ -193,7 +193,7 @@ public:
 
     void commitMoveDirectionData(Direction direction) {
         moveDirectionData[nextMoveDirectionDataIndex] = {direction, false};
-        invokeMovementDetectedHandlerJava(moveDirectionData[nextMoveDirectionDataIndex]);
+        invokeMovementDetectedJNIHandler(moveDirectionData[nextMoveDirectionDataIndex]);
         nextMoveDirectionDataIndex = nextIndex(nextMoveDirectionDataIndex);
         recognizedMoveDirectionCount++;
     }
@@ -243,20 +243,18 @@ public:
     }
 
     void detectMovement() {
-        const int STILL_THRESHOLD = 8;
-
         auto lastDirectionDataIndex = prevIndex(nextAccelerationDirectionDataIndex);
         auto lastDirectionData = accelerationDirectionData[lastDirectionDataIndex];
 
         int currentDirectionDataIndex = prevIndex(lastDirectionDataIndex);
         if (!lastDirectionData.isProcessed &&
             lastDirectionData.direction == Direction::STILL &&
-            lastDirectionData.during >= STILL_THRESHOLD) {
+            lastDirectionData.during >= QUIESCENT_THRESHOLD) {
             AccelerationDirectionData firstDirectionDataAfterLastStill;
             while (!(accelerationDirectionData[currentDirectionDataIndex].direction ==
                      Direction::STILL &&
                      accelerationDirectionData[currentDirectionDataIndex].during >=
-                     STILL_THRESHOLD)) {
+                     QUIESCENT_THRESHOLD)) {
                 firstDirectionDataAfterLastStill = accelerationDirectionData[currentDirectionDataIndex];
                 currentDirectionDataIndex = prevIndex(currentDirectionDataIndex);
             }
@@ -309,7 +307,7 @@ public:
                     moveDirectionData[idx].isProcessed = true;
                 }
                 lastRecognizedGestureName = name;
-                invokeGestureDetectedHandlerJava(lastRecognizedGestureName);
+                invokeGestureDetectedJNIHandler(lastRecognizedGestureName);
                 ++recognizedGestureCount;
             }
         }
@@ -332,17 +330,17 @@ public:
         return diff.count() / repeat;
     }
 
-    void invokeDirectionChangeHandlerJava(const AccelerationDirectionData &directionData) {
+    void invokeDirectionChangeJNIHandler(const AccelerationDirectionData &directionData) {
         jstring direction = jniEnv->NewStringUTF(directionData.toString().c_str());
         jniEnv->CallVoidMethod(jLib, jMethodIdHandleDirectionChange, direction);
     }
 
-    void invokeMovementDetectedHandlerJava(const MoveDirectionData &moveData) {
+    void invokeMovementDetectedJNIHandler(const MoveDirectionData &moveData) {
         jstring movement = jniEnv->NewStringUTF(moveData.toString().c_str());
         jniEnv->CallVoidMethod(jLib, jMethodIdHandleMovementDetected, movement);
     }
 
-    void invokeGestureDetectedHandlerJava(const std::string &gestureName) {
+    void invokeGestureDetectedJNIHandler(const std::string &gestureName) {
         jstring jGestureName = jniEnv->NewStringUTF(gestureName.c_str());
         jniEnv->CallVoidMethod(jLib, jMethodIdHandleGestureDetected, jGestureName);
     }

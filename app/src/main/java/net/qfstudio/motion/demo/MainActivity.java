@@ -99,7 +99,7 @@ public class MainActivity extends AppCompatActivity {
                 float[] readings = motion.getLastMeterReadings();
                 final String text = String.format(
                         Locale.getDefault(),
-                        "x: %f\ny: %f\nz: %f\n",
+                        "x: %+f\ny: %+f\nz: %+f\n",
                         readings[0], readings[1], readings[2]
                 );
 

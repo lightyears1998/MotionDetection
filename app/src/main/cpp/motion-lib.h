@@ -23,6 +23,7 @@ const static int HISTORY_LENGTH = 100;
 const static int SENSOR_REFRESH_RATE_HZ = 100;
 const static int constexpr SENSOR_REFRESH_PERIOD_US = 1000000 / SENSOR_REFRESH_RATE_HZ;
 const static float constexpr SENSOR_FILTER_ALPHA = 0.1f;
+const static int QUIESCENT_THRESHOLD = 16;
 
 struct AccelerometerReadings {
     float x;
