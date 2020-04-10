@@ -42,11 +42,56 @@ struct DirectionData {
     bool isProcessed = false;
 
     const static int MAX_DURING = 25;
+
+    std::string toString() const {
+        switch (this->direction) {
+            case Direction::STILL:
+                return "静止";
+
+            case Direction::RIGHT:
+                return "向右";
+
+            case Direction::LEFT:
+                return "向左";;
+            case Direction::UP:
+                return "向上";;
+            case Direction::DOWN:
+                return "向下";;
+            case Direction::FORWARD:
+                return "向前";;
+            case Direction::BACKWARD:
+                return "向后";;
+        }
+    }
 };
 
 struct MoveData {
     Direction direction;
     bool isProcessed = false;
+
+    std::string toString() const {
+        switch (this->direction) {
+            case Direction::STILL:
+                return "静止";
+
+            case Direction::LEFT:
+                return "左移";
+
+            case Direction::RIGHT:
+                return "右移";;
+            case Direction::UP:
+                return "上移";
+
+            case Direction::DOWN:
+                return "下移";
+
+            case Direction::FORWARD:
+                return "前移";
+
+            case Direction::BACKWARD:
+                return "后移";
+        }
+    }
 };
 
 struct Gesture {

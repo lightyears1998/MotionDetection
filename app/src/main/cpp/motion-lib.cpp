@@ -5,6 +5,12 @@ int gestureCount = 0;
 std::string currentGestureName = "静止";
 
 class MotionMan {
+    JNIEnv *jniEnv;
+    jobject jLib;
+    jmethodID jMethodIdHandleDirectionChange;
+    jmethodID jMethodIdHandleMovementDetected;
+    jmethodID jMethodIdHandleGestureDetected;
+
     ASensorManager *sensorManager;
     const ASensor *accelerometer;
     ALooper *looper;
@@ -101,11 +107,6 @@ public:
                                                         ASENSOR_TYPE_LINEAR_ACCELERATION);
         assert(accelerometer != NULL);
         looper = ALooper_forThread();
-//        if (looper != NULL) {
-//            throw std::runtime_error("MotionLib must be initialized in a dedicated thread.");
-//        }
-//        assert(looper == NULL);
-//        looper = ALooper_prepare(0);
         assert(looper != NULL);
 
         accelerometerEventQueue = ASensorManager_createEventQueue(sensorManager, looper,
@@ -113,17 +114,23 @@ public:
                                                                   sensorEventCallback,
                                                                   NULL);
         assert(accelerometerEventQueue != NULL);
-//        auto status = ASensorEventQueue_enableSensor(accelerometerEventQueue,
-//                                                     accelerometer);
-//        assert(status >= 0);
-//        status = ASensorEventQueue_setEventRate(accelerometerEventQueue,
-//                                                accelerometer,
-//                                                SENSOR_REFRESH_PERIOD_US);
-//        assert(status >= 0);
     }
 
-    void init(AAssetManager *assetManager) {
+    void initJNIEnv(JNIEnv *env, jobject jLib) {
+        this->jniEnv = env;
+        this->jLib = env->NewGlobalRef(jLib);
+        jclass clazz = env->GetObjectClass(this->jLib);
+        jMethodIdHandleDirectionChange = env->GetMethodID(clazz, "handleDirectionChange",
+                                                          "(Ljava/lang/String;)V");
+        jMethodIdHandleMovementDetected = env->GetMethodID(clazz, "handleMovementDetected",
+                                                           "(Ljava/lang/String;)V");
+        jMethodIdHandleGestureDetected = env->GetMethodID(clazz, "handleGestureDetected",
+                                                          "(Ljava/lang/String;)V");
+    }
+
+    void init(AAssetManager *assetManager, JNIEnv *env, jobject jLib) {
         loadGestureFromAsset(assetManager);
+        initJNIEnv(env, jLib);
         initSensor();
 
         LOG_I("Initialized.");
@@ -168,6 +175,7 @@ public:
     void commitDirectionData(Direction direction) {
         if (direction != getLastDirection()) {
             directionData[nextDirectionDataIndex] = {direction, 1, false};
+            callJavaHandleDirectionChange(directionData[nextDirectionDataIndex]);
             nextDirectionDataIndex = nextIndex(nextDirectionDataIndex);
         } else {
             int index = prevIndex(nextDirectionDataIndex);
@@ -179,6 +187,7 @@ public:
 
     void commitMoveData(Direction direction) {
         moveData[nextMoveDataIndex] = {direction, false};
+        callJavaHandleMovementDetected(moveData[nextMoveDataIndex]);
         nextMoveDataIndex = nextIndex(nextMoveDataIndex);
         moveDataCount++;
     }
@@ -287,6 +296,7 @@ public:
                     moveData[idx].isProcessed = true;
                 }
                 currentGestureName = name;
+                callJavaHandleGestureDetected(currentGestureName);
                 ++gestureCount;
             }
         }
@@ -308,6 +318,21 @@ public:
         std::chrono::duration<float, std::milli> diff = stop - start;
         return diff.count() / repeat;
     }
+
+    void callJavaHandleDirectionChange(const DirectionData &directionData) {
+        jstring direction = jniEnv->NewStringUTF(directionData.toString().c_str());
+        jniEnv->CallVoidMethod(jLib, jMethodIdHandleDirectionChange, direction);
+    }
+
+    void callJavaHandleMovementDetected(const MoveData &moveData) {
+        jstring movement = jniEnv->NewStringUTF(moveData.toString().c_str());
+        jniEnv->CallVoidMethod(jLib, jMethodIdHandleMovementDetected, movement);
+    }
+
+    void callJavaHandleGestureDetected(const std::string &gestureName) {
+        jstring jGestureName = jniEnv->NewStringUTF(gestureName.c_str());
+        jniEnv->CallVoidMethod(jLib, jMethodIdHandleGestureDetected, jGestureName);
+    }
 };
 
 MotionMan motionMan;
@@ -320,18 +345,17 @@ int motionMan_SensorEventCallback(int fd, int events, void *data) {
     motionMan.update();
     return 1; // To continue receiving callbacks.
 }
-
 ALooper_callbackFunc sensorEventCallback = &motionMan_SensorEventCallback;
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_net_qfstudio_motion_MotionLib_initUnderlyingNativeCode(JNIEnv *env, jobject clazz,
-                                                            jobject assetManager) {
+Java_net_qfstudio_motion_MotionLib_initUnderlyingNativeLib(JNIEnv *env, jobject jLib,
+                                                           jobject assetManager) {
     (void) env;
-    (void) clazz;
+    (void) jLib;
 
     AAssetManager *nativeAssetManager = AAssetManager_fromJava(env, assetManager);
-    motionMan.init(nativeAssetManager);
+    motionMan.init(nativeAssetManager, env, jLib);
 }
 
 extern "C"
@@ -383,31 +407,7 @@ Java_net_qfstudio_motion_MotionLib_getLastMovement(JNIEnv *env, jobject clazz) {
     (void) clazz;
 
     MoveData moveData = motionMan.getLastMoveData();
-    std::string str = std::to_string(motionMan.getMoveDataCount()) + ":";
-    switch (moveData.direction) {
-        case Direction::STILL:
-            str += "静止";
-            break;
-        case Direction::LEFT:
-            str += "左移";
-            break;
-        case Direction::RIGHT:
-            str += "右移";
-            break;
-        case Direction::UP:
-            str += "上移";
-            break;
-        case Direction::DOWN:
-            str += "下移";
-            break;
-        case Direction::FORWARD:
-            str += "前移";
-            break;
-        case Direction::BACKWARD:
-            str += "后移";
-            break;
-    }
-    return env->NewStringUTF(str.c_str());
+    return env->NewStringUTF(moveData.toString().c_str());
 }
 
 extern "C"
@@ -426,29 +426,5 @@ Java_net_qfstudio_motion_MotionLib_getLastDirection(JNIEnv *env, jobject clazz) 
     (void) clazz;
 
     auto data = motionMan.getLastDirectionData();
-    std::string str;
-    switch (data.direction) {
-        case Direction::STILL:
-            str = "静止";
-            break;
-        case Direction::RIGHT:
-            str = "向右";
-            break;
-        case Direction::LEFT:
-            str = "向左";
-            break;
-        case Direction::UP:
-            str = "向上";
-            break;
-        case Direction::DOWN:
-            str = "向下";
-            break;
-        case Direction::FORWARD:
-            str = "向前";
-            break;
-        case Direction::BACKWARD:
-            str = "向后";
-            break;
-    }
-    return env->NewStringUTF(str.c_str());
+    return env->NewStringUTF(data.toString().c_str());
 }

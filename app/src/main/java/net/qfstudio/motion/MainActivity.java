@@ -11,19 +11,55 @@ import java.util.TimerTask;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+
 public class MainActivity extends AppCompatActivity {
 
     private MotionLib motion;
 
-    private Timer timer;
+    private Timer updateTimer;
     private TextView sensorValueTextView;
     private TextView meterDirectionTextView;
     private TextView movementTextView;
     private TextView gestureTextView;
 
-    private String lastMicroState;
-    private String lastMovement;
-    private String lastGesture;
+    private MotionLibEventHandler motionHandler = new MotionLibEventHandler() {
+        int directionCount = 0;
+        int movementCount = 0;
+        int gestureCount = 0;
+
+        @Override
+        public void onDirectionChanged(final String direction) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    String text = String.format(Locale.getDefault(), " %d:%s", directionCount++, direction);
+                    meterDirectionTextView.append(text);
+                }
+            });
+        }
+
+        @Override
+        public void onMovementDetected(final String movement) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    String text = String.format(Locale.getDefault(), " %d:%s", movementCount++, movement);
+                    movementTextView.append(text);
+                }
+            });
+        }
+
+        @Override
+        public void onGestureDetected(final String gestureName) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    String text = String.format(Locale.getDefault(), " %d:%s", gestureCount++, gestureName);
+                    gestureTextView.append(text);
+                }
+            });
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -31,6 +67,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         this.motion = new MotionLib(getAssets());
+        this.motion.setHandler(this.motionHandler);
         this.sensorValueTextView = findViewById(R.id.sensorText);
         this.meterDirectionTextView = findViewById(R.id.meterDirectionText);
         this.movementTextView = findViewById(R.id.movementText);
@@ -44,13 +81,11 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void setTimerTask() {
-        this.timer = new Timer();
-        this.timer.schedule(new TimerTask() {
+    private void setMeterUpdateTimer() {
+        this.updateTimer = new Timer();
+        this.updateTimer.schedule(new TimerTask() {
             @Override
             public void run() {
-//                MotionLibJNI.update();
-
                 float[] acceleration = motion.getLastMeterValue();
                 final String accelerationStr = String.format(
                         Locale.getDefault(),
@@ -58,36 +93,20 @@ public class MainActivity extends AppCompatActivity {
                         acceleration[0], acceleration[1], acceleration[2]
                 );
 
-                final String currentMicroState = motion.getLastDirection();
-                final String currentMovement = motion.getLastMovement();
-                final String currentGesture = motion.getLastGesture();
-
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
                         sensorValueTextView.setText(accelerationStr);
-                        if (!currentMicroState.equals(lastMicroState)) {
-                            meterDirectionTextView.append(" " + currentMicroState);
-                            lastMicroState = currentMicroState;
-                        }
-                        if (!currentMovement.equals(lastMovement)) {
-                            movementTextView.append(" " + currentMovement);
-                            lastMovement = currentMovement;
-                        }
-                        if (!currentGesture.equals(lastGesture)) {
-                            gestureTextView.append(" " + currentGesture);
-                            lastGesture = currentGesture;
-                        }
                     }
                 });
             }
-        }, 0, 20);
+        }, 0, 40);
     }
 
-    private void cancelTimerTask() {
-        if (this.timer != null) {
-            this.timer.cancel();
-            this.timer = null;
+    private void cancelMeterUpdateTimer() {
+        if (this.updateTimer != null) {
+            this.updateTimer.cancel();
+            this.updateTimer = null;
         }
     }
 
@@ -96,7 +115,7 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
 
         motion.resume();
-        this.setTimerTask();
+        this.setMeterUpdateTimer();
     }
 
     @Override
@@ -104,7 +123,7 @@ public class MainActivity extends AppCompatActivity {
         super.onPause();
 
         motion.pause();
-        this.cancelTimerTask();
+        this.cancelMeterUpdateTimer();
     }
 
     void clearScreen() {
